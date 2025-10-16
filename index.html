@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>GLF TeKnoService</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="logo.png">
+  <meta name="theme-color" content="#ff0a09" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- jsPDF + autotable -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- Firebase (modular) exposed on window.Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import {
+      getAuth, onAuthStateChanged, signInWithEmailAndPassword,
+      createUserWithEmailAndPassword, signOut, updateProfile
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, collection,
+      getDocs, deleteDoc, query, where
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    window.Firebase = {
+      initializeApp, getAuth, onAuthStateChanged, signInWithEmailAndPassword,
+      createUserWithEmailAndPassword, signOut, updateProfile,
+      getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, query, where
+    };
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <img src="logo.png" class="logo" alt="GLF TeKnoService">
+      <button id="btnSettings" class="icon-gear" aria-label="Impostazioni" title="Impostazioni">⚙️</button>
+    </div>
+  </header>
+
+  <main class="container" id="app" hidden>
+    <h1>Compila giornata</h1>
+    <div class="row day-row">
+      <label for="dayPicker" class="lbl">Giorno</label>
+      <input type="date" id="dayPicker" class="input" />
+    </div>
+
+    <section class="card">
+      <div class="grid-2">
+        <div class="field"><label>Ingresso 1</label><div class="timepair">
+          <select id="in1_h" class="time"></select><select id="in1_m" class="time"></select></div></div>
+        <div class="field"><label>Uscita 1</label><div class="timepair">
+          <select id="out1_h" class="time"></select><select id="out1_m" class="time"></select></div></div>
+        <div class="field"><label>Ingresso 2</label><div class="timepair">
+          <select id="in2_h" class="time"></select><select id="in2_m" class="time"></select></div></div>
+        <div class="field"><label>Uscita 2</label><div class="timepair">
+          <select id="out2_h" class="time"></select><select id="out2_m" class="time"></select></div></div>
+        <div class="field"><label>KM totali</label><input id="km" type="number" class="input" min="0" step="1" value="0" /></div>
+        <div class="field"><label>Cliente (opz.)</label><select id="clientSel" class="input"><option value="">—</option></select></div>
+      </div>
+
+      <div class="chip-row">
+        <button id="chipTrasferta" class="chip">Trasferta</button>
+        <button id="chipPernotto" class="chip">Pernotto</button>
+      </div>
+
+      <div class="field"><label>Note</label><textarea id="note" rows="3" class="input" placeholder="Cliente / sede / attività"></textarea></div>
+
+      <div class="actions">
+        <button id="btnSave" class="btn primary">Salva giornata</button>
+        <button id="btnPdf" class="btn ghost">Esporta PDF</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="segmented">
+        <button id="tabList" class="seg on">Elenco</button>
+        <button id="tabCal" class="seg">Calendario</button>
+        <div class="month" id="monthLabel"></div>
+      </div>
+      <div id="listView" class="list-view"></div>
+      <div id="calView" class="cal hidden"><div class="cal-grid" id="calGrid"></div></div>
+    </section>
+  </main>
+
+  <!-- AUTH overlay -->
+  <div id="auth" class="auth">
+    <div class="auth-card">
+      <img src="logo.png" class="auth-logo" alt="logo">
+      <h2>Accesso</h2>
+      <input id="login_email" class="input" type="email" placeholder="Email">
+      <input id="login_pass" class="input" type="password" placeholder="Password">
+      <div class="actions"><button id="btnLogin" class="btn primary">Entra</button><button id="toggleReg" class="btn ghost">Registra</button></div>
+
+      <div id="regPanel" class="reg hidden">
+        <h3>Registrazione utente + ditta</h3>
+        <div class="grid-2">
+          <input id="r_nome" class="input" placeholder="Nome"><input id="r_cognome" class="input" placeholder="Cognome">
+          <input id="r_ragsoc" class="input" placeholder="Ragione sociale"><input id="r_piva" class="input" placeholder="P.IVA / CF">
+          <input id="r_indir" class="input" placeholder="Indirizzo"><input id="r_citta" class="input" placeholder="Città / Provincia">
+          <input id="r_emailAz" class="input" placeholder="Email aziendale"><input id="r_tel" class="input" placeholder="Telefono">
+          <input id="r_sdi" class="input" placeholder="Codice SDI / PEC">
+        </div>
+        <div class="grid-2"><input id="r_email" class="input" placeholder="Email di accesso"><input id="r_pass" class="input" placeholder="Password di accesso" type="password"></div>
+        <div class="actions"><button id="btnRegister" class="btn primary">Conferma registrazione</button></div>
+      </div>
+      <p id="authMsg" class="msg"></p>
+    </div>
+  </div>
+
+  <!-- Settings MODAL -->
+  <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-head"><h2>Impostazioni</h2><button id="modalClose" class="modal-x" aria-label="Chiudi">✕</button></div>
+      <div class="modal-tabs"><button class="tab on" data-tab="clienti">Clienti</button><button class="tab" data-tab="tariffe">Tariffe</button></div>
+      <div class="modal-body">
+        <div id="pane-clienti" class="tab-pane">
+          <div class="grid-2">
+            <input id="cl_ragsoc" class="input" placeholder="Ragione sociale"><input id="cl_piva" class="input" placeholder="P.IVA / CF">
+            <input id="cl_email" class="input" placeholder="Email"><input id="cl_tel" class="input" placeholder="Telefono">
+            <input id="cl_addr" class="input" placeholder="Indirizzo"><input id="cl_sdi" class="input" placeholder="Codice SDI">
+          </div>
+          <div class="actions space">
+            <button id="btnAddClient" class="btn ghost">Aggiungi cliente</button>
+            <button id="btnDelClient" class="btn danger">Elimina selezionato</button>
+            <select id="selClients" class="input small"></select>
+            <button id="btnSaveClients" class="btn primary">Salva clienti</button>
+          </div>
+        </div>
+        <div id="pane-tariffe" class="tab-pane hidden">
+          <div class="grid-2">
+            <input id="t_or" class="input" placeholder="€/h ordinarie" value="12"><input id="t_str" class="input" placeholder="€/h straordinarie" value="25">
+            <input id="t_km" class="input" placeholder="€/km" value="0.40"><input id="t_trasf" class="input" placeholder="€ Trasferta (gg)" value="50">
+            <input id="t_pern" class="input" placeholder="€ Pernotto (nt)" value="80">
+          </div>
+          <div class="actions right"><button id="btnSaveRates" class="btn primary">Salva tariffe</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="copy">© GLF Teknoservice</footer>
+
+  <script type="module" src="app.js"></script>
+
+  <!-- Service Worker register -->
+  <script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js")
+      .then(()=>console.log("✅ Service Worker registrato"))
+      .catch(err=>console.error("SW error", err));
+  }
+  </script>
+</body>
+</html>
